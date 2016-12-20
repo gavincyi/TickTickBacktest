@@ -40,24 +40,18 @@ if __name__ == '__main__':
     logger.info('Schema = %s' % schema)
 
     # Get data names
-    order_book_names = config_man.get_orderbook_data_names()
-    trade_names = config_man.get_trade_data_names()
-    logger.info('Order book names = \n%s' % order_book_names)
-    logger.info('Trade names = \n%s' % trade_names)
+    data_list = config_man.get_data('Data20161123')
+    logger.info('Data list = %s' % data_list)
 
     # Connect to database
     logger.info('Connecting to database...')
     pipe_factory = MysqlPipeFactory(logger=logger, host=host, port=port, user=username, pwd=pwd, schema=schema)
-    db_client = pipe_factory.create()
-    if db_client.connect(host=host, port=port, user=username, pwd=pwd, schema=schema):
-        logger.info('Database is successful to connect.')
+    for data in data_list:
+        pipe_factory.prepare(data)
 
-    row = db_client.select(table=order_book_names[0][0],isFetchAll=False)
-    logger.info(row)
-    row = db_client.fetchone()
-    logger.info(row)
-    db_client.close()
+    for i in range(0, 100):
+        key = pipe_factory.pop_next()
+        logger.info('%d: Next = %s' % (i, key))
 
-
-
+    pipe_factory.close()
 

@@ -5,6 +5,19 @@ except ImportError:
 import ast
 
 class ConfigManager:
+    class ConfigDataBlock:
+        def __init__(self, data):
+            self.name = data['name']
+            self.table = data['table']
+            self.datetime_field = data['datetime_field']
+            self.datetime_format = data['datetime_format']
+
+    class ConfigDataBlockList(list):
+        def __init__(self, data_list):
+            list.__init__(self)
+            for data in data_list:
+                self.append(ConfigManager.ConfigDataBlock(data))
+
     """
     Configuration manager
     """
@@ -12,7 +25,7 @@ class ConfigManager:
         """
         Constructor
         """
-        self.__config = ConfigParser.ConfigParser()
+        self.__config = ConfigParser.RawConfigParser()
         self.__config.read(config_path)
         self.__mysqldb_section_name = 'Mysqldb'
         self.__data_section_name = 'Data'
@@ -42,17 +55,12 @@ class ConfigManager:
         """
         return self.__data_section_name in self.__config.sections()
 
-    def get_orderbook_data_names(self):
+    def get_data(self, name):
         """
         Get orderbook data names
         :return: List of names
         """
-        return ast.literal_eval(self.__config.get(self.__data_section_name, 'Orderbook'))
-
-    def get_trade_data_names(self):
-        """
-        Get trades data names
-        :return: List of names
-        """
-        return ast.literal_eval(self.__config.get(self.__data_section_name, 'Trades'))
+        eval_string = self.__config.get(self.__data_section_name, name)
+        data = ast.literal_eval(eval_string)
+        return ConfigManager.ConfigDataBlockList(data)
 
