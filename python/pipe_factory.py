@@ -72,7 +72,7 @@ class MysqlPipeFactory(PipeFactory):
         min_args.curr_cursor = min_args.next_cursor.copy()
         min_args.next_cursor = min_args.client.fetchone()
 
-        return min_args_key
+        return min_args_key, min_args.curr_cursor
 
     def close(self):
         for key, value in self.pipes.items():

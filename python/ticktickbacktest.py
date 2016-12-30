@@ -50,8 +50,8 @@ if __name__ == '__main__':
         pipe_factory.prepare(data)
 
     for i in range(0, 100):
-        key = pipe_factory.pop_next()
-        logger.info('%d: Next = %s' % (i, key))
+        key, row = pipe_factory.pop_next()
+        logger.info('%d: %s - Next = %s' % (i, key, row))
 
     pipe_factory.close()
 
