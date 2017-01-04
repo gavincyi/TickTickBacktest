@@ -24,6 +24,12 @@ class PipeFactory:
         """
         return None
 
+    def close(self):
+        """
+        Close
+        """
+        pass
+
 
 class MysqlPipeFactory(PipeFactory):
     """
@@ -39,6 +45,10 @@ class MysqlPipeFactory(PipeFactory):
         self.schema = schema
 
     def prepare(self, data_info):
+        """
+        Prepare and create a mysql client to a dedicated table
+        :param data_info: Data info
+        """
         if data_info.table not in self.pipes.keys():
             client = MysqlClient(self.logger)
             client.connect(host=self.host, \
@@ -57,6 +67,11 @@ class MysqlPipeFactory(PipeFactory):
             raise Exception("Table name (%s) is prepared before" % data_info.table)
 
     def pop_next(self):
+        """
+        Pop the next update row
+        :return: The table name and row of the next update row. If there is no further element,
+                 all return elements are none.
+        """
         min_time = datetime.datetime.now()
         min_args_key = ''
 
@@ -70,11 +85,21 @@ class MysqlPipeFactory(PipeFactory):
 
         min_args = self.pipes[min_args_key]
         min_args.curr_cursor = min_args.next_cursor.copy()
-        min_args.next_cursor = min_args.client.fetchone()
+        try:
+            min_args.next_cursor = min_args.client.fetchone()
+            if min_args.next_cursor is None:
+                return None, None
+        except Exception as e:
+            self.logger.info(self.__class__.__name__, 'Failed to fetch next. (%s)' % e)
+            return None, None
 
         return min_args_key, min_args.curr_cursor
 
     def close(self):
+        """
+        Close all clients
+        :return:
+        """
         for key, value in self.pipes.items():
             value.client.close()
 

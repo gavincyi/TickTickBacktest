@@ -1,9 +1,10 @@
 from config_manager import ConfigManager
-from pipe_factory import MysqlPipeFactory
+from exchange import Exchange
+from backtest_machine import BacktestMachine
+from trade_monitor import TradeMonitor
 import logging
 import argparse
 import sys
-import time
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Tool for backtesting tick data')
@@ -39,19 +40,27 @@ if __name__ == '__main__':
     logger.info('Username = %s' % username)
     logger.info('Schema = %s' % schema)
 
-    # Get data names
-    data_list = config_man.get_data('Data20161123')
-    logger.info('Data list = %s' % data_list)
+    # Get exchange names
+    exchanges = {}
+    exchange_names = config_man.get_exchange_names()
+    for exchange_name in exchange_names:
+        exchange_info = config_man.get_exchange(exchange_name)
+        exchanges[exchange_info.name] = Exchange(exchange_info)
 
-    # Connect to database
-    logger.info('Connecting to database...')
-    pipe_factory = MysqlPipeFactory(logger=logger, host=host, port=port, user=username, pwd=pwd, schema=schema)
-    for data in data_list:
-        pipe_factory.prepare(data)
+    # Prepare backtest machine
+    backtest_machine = BacktestMachine(exchanges=exchanges, logger=logger)
+    # Register strategies
+    backtest_machine.register_strategy(TradeMonitor(logger))
 
-    for i in range(0, 100):
-        key, row = pipe_factory.pop_next()
-        logger.info('%d: %s - Next = %s' % (i, key, row))
-
-    pipe_factory.close()
-
+    # Prepare the pipe
+    data_names = config_man.get_data_names()
+    backtest_machine.prepare_mysql_pipe(data_list=config_man.get_data(data_names[0]),
+                                        logger=logger,
+                                        host=host,
+                                        user=username,
+                                        pwd=pwd,
+                                        schema=schema)
+    # Start running
+    backtest_machine.run()
+    # Close all the pipes
+    backtest_machine.close()

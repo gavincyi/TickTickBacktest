@@ -1,12 +1,14 @@
 #!/bin/python
 from datetime import datetime
 import copy
+import re
 
 
 class MarketDataBase:
     """
     Abstract class of a market data
     """
+
     class Side:
         NONE = 0
         BUY = 1
@@ -33,9 +35,9 @@ class MarketDataBase:
         """
         if type(value) != int:
             value = value.lower()
-            if value == 'buy' or value == 'bid':
+            if value == 'buy' or value == 'bid' or value == 'b':
                 return MarketDataBase.Side.BUY
-            elif value == 'sell' or value == 'ask':
+            elif value == 'sell' or value == 'ask' or value == 's':
                 return MarketDataBase.Side.SELL
             else:
                 return MarketDataBase.Side.NONE
@@ -45,7 +47,7 @@ class MarketDataBase:
         elif value == 2:
             return MarketDataBase.Side.SELL
         else:
-            return MarketDataBase.Side.NONE
+            raise Exception("Cannot parse the side (%s)" % value)
 
     def __init__(self):
         """
@@ -53,11 +55,20 @@ class MarketDataBase:
         """
         pass
 
+    def update(self, data_dict):
+        """
+        Update
+        :param data_dict: Data dict
+        """
+        for key in self.columns():
+            self.__setattr__(key, data_dict[key])
+
 
 class L2Depth(MarketDataBase):
     """
     L2 price depth. Container of date, time, bid and ask up to 5 levels
     """
+
     def __init__(self, depth=5):
         """
         Constructor
@@ -85,7 +96,7 @@ class L2Depth(MarketDataBase):
         """
         Return static column types
         """
-        return ['text'] + \
+        return ['varchar(25)'] + \
                ['decimal(10,5)'] * 10 + \
                ['decimal(20,8)'] * 10
 
@@ -111,7 +122,7 @@ class L2Depth(MarketDataBase):
         Sorting bids
         :return:
         """
-        self.bids.sort(key=lambda x:x.price, reverse=True)
+        self.bids.sort(key=lambda x: x.price, reverse=True)
         if len(self.bids) > self.depth:
             self.bids = self.bids[0:self.depth]
 
@@ -120,7 +131,7 @@ class L2Depth(MarketDataBase):
         Sorting bids
         :return:
         """
-        self.asks.sort(key=lambda x:x.price)
+        self.asks.sort(key=lambda x: x.price)
         if len(self.asks) > self.depth:
             self.asks = self.asks[0:self.depth]
 
@@ -128,7 +139,11 @@ class L2Depth(MarketDataBase):
         """
         Copy
         """
-        return copy.deepcopy(self)
+        ret = L2Depth(depth=self.depth)
+        ret.date_time = self.date_time
+        ret.bids = [e.copy() for e in self.bids]
+        ret.asks = [e.copy() for e in self.asks]
+        return ret
 
     def is_diff(self, l2_depth):
         """
@@ -137,18 +152,45 @@ class L2Depth(MarketDataBase):
         :return: True if they are different
         """
         for i in range(0, 5):
-            if self.bids[i].price != l2_depth.bids[i].price or \
-               self.bids[i].volume != l2_depth.bids[i].volume:
+            if abs(self.bids[i].price - l2_depth.bids[i].price) > 1e-09 or \
+                            abs(self.bids[i].volume - l2_depth.bids[i].volume) > 1e-09:
                 return True
-            elif self.asks[i].price != l2_depth.asks[i].price or \
-                self.asks[i].volume != l2_depth.asks[i].volume:
+            elif abs(self.asks[i].price - l2_depth.asks[i].price) > 1e-09 or \
+                            abs(self.asks[i].volume - l2_depth.asks[i].volume) > 1e-09:
                 return True
         return False
+
+    def update(self, data_dict):
+        """
+        Update
+        :param data_dict: Data dict
+        """
+        for key, value in data_dict.items():
+            bid_px = re.compile('b(\\d+)').match(key)
+            ask_px = re.compile('a(\\d+)').match(key)
+            bid_volume = re.compile('bq(\\d+)').match(key)
+            ask_volume = re.compile('aq(\\d+)').match(key)
+            if bid_px is not None:
+                index = int(bid_px.group(1)) - 1
+                self.bids[index].price = value
+            elif ask_px is not None:
+                index = int(ask_px.group(1)) - 1
+                self.asks[index].price = value
+            elif bid_volume is not None:
+                index = int(bid_volume.group(1)) - 1
+                self.bids[index].volume = value
+            elif ask_volume is not None:
+                index = int(ask_volume.group(1)) - 1
+                self.asks[index].volume = value
+            else:
+                self.__setattr__(key, value)
+
 
 class Trade(MarketDataBase):
     """
     Trade. Container of date, time, trade price, volume and side.
     """
+
     def __init__(self):
         """
         Constructor
@@ -162,8 +204,7 @@ class Trade(MarketDataBase):
         self.trade_price = 0.0
         self.trade_volume = 0.0
         self.trade_side = MarketDataBase.Side.NONE
-        self.update_date_time = datetime.utcnow()
-
+        self.date_time = datetime.utcnow()
 
     @staticmethod
     def columns():
@@ -177,7 +218,7 @@ class Trade(MarketDataBase):
         """
         Return static column types
         """
-        return ['text', 'text', 'decimal(10,5)', 'decimal(20,8)', 'text']
+        return ['varchar(25)', 'text', 'decimal(10,5)', 'decimal(20,8)', 'int']
 
     def values(self):
         """
@@ -185,3 +226,62 @@ class Trade(MarketDataBase):
         """
         return [self.date_time] + \
                [self.trade_id] + [self.trade_price] + [self.trade_volume] + [self.trade_side]
+
+    def copy(self):
+        return copy.deepcopy(self)
+
+
+class Snapshot(MarketDataBase):
+    """
+    Market price snapshot
+    """
+
+    class UpdateType:
+        NONE = 0
+        ORDER_BOOK = 1
+        TRADES = 2
+
+    def __init__(self, exchange, instmt_name):
+        """
+        Constructor
+        :param exch: Exchange name
+        :param instmt: Instrument name
+        :param default_format: Default date time format
+        """
+        MarketDataBase.__init__(self)
+
+    @staticmethod
+    def columns():
+        """
+        Return static columns names
+        """
+        return ['exchange', 'instmt',
+                'trade_px', 'trade_volume',
+                'b1', 'b2', 'b3', 'b4', 'b5',
+                'a1', 'a2', 'a3', 'a4', 'a5',
+                'bq1', 'bq2', 'bq3', 'bq4', 'bq5',
+                'aq1', 'aq2', 'aq3', 'aq4', 'aq5',
+                'order_date_time', 'trades_date_time', 'update_type']
+
+    @staticmethod
+    def types():
+        """
+        Return static column types
+        """
+        return ['varchar(20)', 'varchar(20)', 'decimal(10,5)', 'decimal(20,8)'] + \
+               ['decimal(10,5)'] * 10 + \
+               ['decimal(20,8)'] * 10 + \
+               ['varchar(25)', 'varchar(25)', 'int']
+
+    @staticmethod
+    def values(exchange_name, instmt_name, l2_depth, last_trade, update_type=UpdateType.NONE):
+        """
+        Return values in a list
+        """
+        return [exchange_name, instmt_name] + \
+               [last_trade.trade_price, last_trade.trade_volume] + \
+               [b.price for b in l2_depth.bids[0:5]] + \
+               [a.price for a in l2_depth.asks[0:5]] + \
+               [b.volume for b in l2_depth.bids[0:5]] + \
+               [a.volume for a in l2_depth.asks[0:5]] + \
+               [l2_depth.date_time, last_trade.date_time, update_type]
