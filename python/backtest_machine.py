@@ -54,14 +54,16 @@ class BacktestMachine:
         self.strategies.append(strategy)
 
     def run(self):
-        while True:
-            exchange, instmt, update_type = self.__update_next()
+        is_continue = True
+        while is_continue:
+            is_continue, exchange, instmt, update_type = self.__update_next()
             if exchange is None:
                 break
             else:
                 # Open order first
                 for strategy in self.strategies:
-                    order = strategy.open_order(exchange=exchange,
+                    order = strategy.open_order(exchanges=self.exchanges,
+                                                exchange=exchange,
                                                 instmt=instmt,
                                                 update_type=update_type,
                                                 logger=self.logger)
@@ -77,7 +79,7 @@ class BacktestMachine:
 
         self.logger.info('No more data can be extracted. The run has been finished.')
         for strategy in self.strategies:
-            strategy.summary()
+            strategy.summary(exchanges=self.exchanges)
 
     def close(self):
         self.pipe.close()
@@ -89,9 +91,9 @@ class BacktestMachine:
                  elements are none.
         """
         # Pop the next data row
-        key, row = self.pipe.pop_next()
+        is_continue, key, row = self.pipe.pop_next()
         if key is None or row is None:
-            return None, None, None
+            return False, None, None, None
 
         # Get the data info
         assert key in self.pipe.pipes.keys(), "Key (%s) is not in the pipe list" % key
@@ -118,4 +120,4 @@ class BacktestMachine:
             update_type = BacktestMachine.UpdateType.TRADES
             instmt.update_trade(row)
 
-        return exchange, instmt, update_type
+        return is_continue, exchange, instmt, update_type

@@ -2,6 +2,7 @@ from config_manager import ConfigManager
 from exchange import Exchange
 from backtest_machine import BacktestMachine
 from trade_monitor import TradeMonitor
+from future_spread_analysis import FutureSpreadAnalysis
 import logging
 import argparse
 import sys
@@ -47,20 +48,23 @@ if __name__ == '__main__':
         exchange_info = config_man.get_exchange(exchange_name)
         exchanges[exchange_info.name] = Exchange(exchange_info)
 
-    # Prepare backtest machine
-    backtest_machine = BacktestMachine(exchanges=exchanges, logger=logger)
-    # Register strategies
-    backtest_machine.register_strategy(TradeMonitor(logger))
-
-    # Prepare the pipe
     data_names = config_man.get_data_names()
-    backtest_machine.prepare_mysql_pipe(data_list=config_man.get_data(data_names[0]),
-                                        logger=logger,
-                                        host=host,
-                                        user=username,
-                                        pwd=pwd,
-                                        schema=schema)
-    # Start running
-    backtest_machine.run()
-    # Close all the pipes
-    backtest_machine.close()
+
+    for data_name in data_names:
+        # Prepare backtest machine
+        backtest_machine = BacktestMachine(exchanges=exchanges, logger=logger)
+        # Register strategies
+        # backtest_machine.register_strategy(TradeMonitor(logger))
+        backtest_machine.register_strategy(FutureSpreadAnalysis(logger))
+
+        # Prepare the pipe
+        backtest_machine.prepare_mysql_pipe(data_list=config_man.get_data(data_name),
+                                            logger=logger,
+                                            host=host,
+                                            user=username,
+                                            pwd=pwd,
+                                            schema=schema)
+        # Start running
+        backtest_machine.run()
+        # Close all the pipes
+        backtest_machine.close()

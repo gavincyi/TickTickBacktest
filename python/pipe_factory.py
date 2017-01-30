@@ -88,12 +88,13 @@ class MysqlPipeFactory(PipeFactory):
         try:
             min_args.next_cursor = min_args.client.fetchone()
             if min_args.next_cursor is None:
-                return None, None
+                return False, min_args_key, min_args.curr_cursor
         except Exception as e:
             self.logger.info(self.__class__.__name__, 'Failed to fetch next. (%s)' % e)
-            return None, None
+            return False, min_args_key, min_args.curr_cursor
+            # return False, None, None
 
-        return min_args_key, min_args.curr_cursor
+        return True, min_args_key, min_args.curr_cursor
 
     def close(self):
         """
